@@ -7,7 +7,7 @@
 ##  Key Features
 
 -  **Custom Reminder Notifications**
-- 🗓 **Date & Time Picker** using `tkcalendar`
+-  **Date & Time Picker** using `tkcalendar`
 -  **Auto-save Data** (saved per user in JSON format)
 -  **Login & Registration System** with session saving
 -  **Daily Class Schedule View**
@@ -15,7 +15,7 @@
 
 ---
 
-## 🛠 Technologies Used
+##  Technologies Used
 
 - **Python**
 - **Tkinter** – GUI Framework
