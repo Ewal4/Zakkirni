@@ -1,21 +1,21 @@
-# Zakkirni 📆
+# Zakkirni 
 
 **Zakkirni** is a desktop application built using **Python** and **Tkinter**, designed to help university students manage their reminders and daily class schedules through a clean and interactive interface.
 
 ---
 
-## ✅ Key Features
+##  Key Features
 
-- 🔔 **Custom Reminder Notifications**
-- 🗓️ **Date & Time Picker** using `tkcalendar`
-- 💾 **Auto-save Data** (saved per user in JSON format)
-- 🔐 **Login & Registration System** with session saving
-- 🎓 **Daily Class Schedule View**
-- 🧼 **Clean and Responsive UI**
+-  **Custom Reminder Notifications**
+- 🗓 **Date & Time Picker** using `tkcalendar`
+-  **Auto-save Data** (saved per user in JSON format)
+-  **Login & Registration System** with session saving
+-  **Daily Class Schedule View**
+-  **Clean and Responsive UI**
 
 ---
 
-## 🛠️ Technologies Used
+## 🛠 Technologies Used
 
 - **Python**
 - **Tkinter** – GUI Framework
@@ -25,7 +25,7 @@
 
 ---
 
-## 📂 How to Run
+##  How to Run
 
 ```bash
 # Install dependencies (if needed)
