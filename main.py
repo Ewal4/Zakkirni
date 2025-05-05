@@ -23,22 +23,50 @@ schedule_notifications = []  # إشعارات الجدول
 # ============ دوال حفظ واسترجاع البيانات ============
 
 def save_data():
-    data = {
+    user_email = load_session()
+    if not user_email:
+        return
+
+    all_data = {}
+
+    # إذا كان الملف موجود، نقرأ البيانات القديمة أولاً
+    if os.path.exists("data.json"):
+        with open("data.json", "r", encoding="utf-8") as f:
+            all_data = json.load(f)
+
+    # نحفظ بيانات المستخدم الحالي فقط
+    all_data[user_email] = {
         "reminders": [(text, rt.strftime("%Y-%m-%d %I:%M %p")) for text, rt in reminders],
         "schedule": daily_schedule
     }
+
     with open("data.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+        json.dump(all_data, f, ensure_ascii=False, indent=4)
+
 
 def load_data():
-    if os.path.exists("data.json"):
-        with open("data.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-            for text, rt in data.get("reminders", []):
-                remind_time = datetime.datetime.strptime(rt, "%Y-%m-%d %I:%M %p")
-                reminders.append((text, remind_time))
-            for day, subjects in data.get("schedule", {}).items():
-                daily_schedule[day] = subjects
+    user_email = load_session()
+    if not user_email or not os.path.exists("data.json"):
+        return
+
+    # 🟡 مسح بيانات الذاكرة أولًا لتفادي التكرار أو عرض بيانات مستخدم سابق
+    reminders.clear()
+    for day in daily_schedule:
+        daily_schedule[day] = []
+
+    with open("data.json", "r", encoding="utf-8") as f:
+        all_data = json.load(f)
+
+    user_data = all_data.get(user_email)
+    if user_data:
+        for text, rt in user_data.get("reminders", []):
+            remind_time = datetime.datetime.strptime(rt, "%Y-%m-%d %I:%M %p")
+            reminders.append((text, remind_time))
+
+        for day, subjects in user_data.get("schedule", {}).items():
+            daily_schedule[day] = subjects
+
+
 
 # ============ دوال حفظ واسترجاع الجلسة ============
 
@@ -108,8 +136,41 @@ def create_reminder_card(text, remind_time):
 
     # عرض التاريخ والوقت
     tk.Label(card, text=remind_time.strftime("%d/%m - %I:%M%p"), font=("Arial", 12, "bold"), bg="white").pack(anchor="w")
+    
     # عرض نص التذكير
     tk.Label(card, text=text, font=("Arial", 12), bg="white").pack(anchor="w")
+
+    # زر حذف داخل البطاقة
+    def delete_this():
+        if messagebox.askyesno("تأكيد", f"هل تريد حذف التذكير:\n{text}?"):
+            reminders.remove((text, remind_time))
+            card.destroy()
+            save_data()
+
+    #  tk.Button(card, text="حذف", command=delete_this, bg="darkred", fg="white").pack(anchor="e", pady=5)
+# ============ دوال التذكيرات ============
+
+def create_reminder_card(text, remind_time):
+    card = tk.Frame(reminder_frame, bg="white", bd=2, relief="ridge", padx=10, pady=5)
+    card.pack(pady=5, fill="x", padx=5)
+
+    # عرض التاريخ والوقت
+    tk.Label(card, text=remind_time.strftime("%d/%m - %I:%M%p"), font=("Arial", 12, "bold"), bg="white").pack(anchor="w")
+
+    # عرض نص التذكير
+    tk.Label(card, text=text, font=("Arial", 12), bg="white").pack(anchor="w")
+
+    # زر الحذف
+    def delete_this():
+        # if messagebox.askyesno("تأكيد", f"هل تريد حذف التذكير:\n{text}?"):
+            try:
+                reminders.remove((text, remind_time))
+                card.destroy()
+                save_data()
+            except ValueError:
+                pass
+
+    tk.Button(card, text="مسح", command=delete_this, bg="darkred", fg="white").pack(anchor="e", pady=5)
 
 def open_add_reminder_window():
     reminders_screen.withdraw()
@@ -165,16 +226,12 @@ def open_add_reminder_window():
     tk.Button(add_window, text="موافق", command=confirm_reminder, bg="green", fg="white").pack(pady=10)
     tk.Button(add_window, text="إلغاء", command=lambda: [add_window.destroy(), reminders_screen.deiconify()]).pack()
 
-def delete_selected_reminder():
-    selected = reminder_frame.winfo_children()
-    if selected:
-        # نحذف آخر بطاقة مضافة (بس مبدئياً لحين نعدل طريقة اختيار البطاقة لاحقاً)
-        selected[-1].destroy()
-        if reminders:
-            reminders.pop()
-        save_data()
-
 def load_reminders():
+    # 🟡 تنظيف واجهة التذكيرات من البطاقات القديمة
+    for widget in reminder_frame.winfo_children():
+        widget.destroy()
+
+    # 🟢 عرض تذكيرات المستخدم الحالي فقط
     for text, remind_time in reminders:
         create_reminder_card(text, remind_time)
 
@@ -187,7 +244,10 @@ def check_reminders():
                 message=text,
                 timeout=10
             )
-    root.after(60000, check_reminders)  # كل دقيقة تفحص التذكيرات
+    root.after(60000, check_reminders)
+
+# كل دقيقة تفحص التذكيرات
+
 # ============ دوال الجدول الدراسي اليومي ============
 
 def create_subject_card(subject):
@@ -210,12 +270,28 @@ def create_subject_card(subject):
     # اسم المحاضر
     tk.Label(card, text=subject['teacher'], font=("Arial", 12), bg="white").pack(anchor="w")
 
+    # زر حذف داخل كل بطاقة
+    def delete_this_subject():
+        try:
+            daily_schedule[current_day].remove(subject)
+            card.destroy()
+            save_data()
+        except ValueError:
+            pass
+
+    tk.Button(card, text="مسح", command=delete_this_subject, bg="darkred", fg="white").pack(anchor="e", pady=5)
+
+
 def update_schedule_display():
+    # 🟡 تنظيف البطاقات القديمة
     for widget in schedule_frame.winfo_children():
         widget.destroy()
 
+    # 🟢 عرض البطاقات للمستخدم الحالي
     for subject in daily_schedule[current_day]:
         create_subject_card(subject)
+
+
 
 def open_add_subject_window():
     schedule_screen.withdraw()
@@ -291,14 +367,6 @@ def open_add_subject_window():
     tk.Button(add_subject_window, text="موافق", command=confirm_subject, bg="green", fg="white").pack(pady=10)
     tk.Button(add_subject_window, text="إلغاء", command=lambda: [add_subject_window.destroy(), schedule_screen.deiconify()]).pack()
 
-def delete_selected_subject():
-    selected = schedule_frame.winfo_children()
-    if selected:
-        selected[-1].destroy()
-        if daily_schedule[current_day]:
-            daily_schedule[current_day].pop()
-        save_data()
-
 # ============ تصميم الواجهات ============
 
 # الواجهة الرئيسية
@@ -313,7 +381,6 @@ tk.Label(root, image=bg_main).place(x=0, y=0, relwidth=1, relheight=1)
 tk.Button(root, text="تسجيل الدخول", command=open_login_screen).place(x=110, y=700, width=170, height=40)
 tk.Button(root, text="سجل الآن", command=open_register_screen).place(x=110, y=750, width=170, height=40)
 
-# واجهة تسجيل الدخول
 # واجهة تسجيل الدخول
 login_screen = tk.Toplevel()
 login_screen.title("تسجيل الدخول")
@@ -341,10 +408,24 @@ def login_user():
 
     if email in users and users[email]["password"] == password:
         save_session(email)
-        messagebox.showinfo("أهلاً", f"مرحباً {users[email]['name']}!")
-        login_screen.withdraw()
+
+        # 🟡 امسحي البيانات المؤقتة من الجلسة السابقة
+        reminders.clear()
+        for day in daily_schedule:
+            daily_schedule[day] = []
+
+        # 🟢 تحميل البيانات الجديدة من الملف
         load_data()
+
+        # 🟢 فتح واجهة التذكيرات بعد التحميل
+        login_screen.withdraw()
         reminders_screen.deiconify()
+
+        # 🟢 عرض التذكيرات والجدول بشكل صحيح بعد الفتح
+        load_reminders()
+        update_schedule_display()
+
+        messagebox.showinfo("أهلاً", f"مرحباً {users[email]['name']}!")
     else:
         messagebox.showerror("خطأ", "البريد أو كلمة المرور غير صحيحة")
 
@@ -390,9 +471,17 @@ def register_user():
     users[email] = {"name": name, "password": password}
     save_users(users)
     save_session(email)
+
+    # 🟡 مسح بيانات الذاكرة القديمة
+    reminders.clear()
+    for day in daily_schedule:
+        daily_schedule[day] = []
+
+    # تحميل بيانات المستخدم الجديد (غالبًا فاضية)
+    load_data()
+
     messagebox.showinfo("تم", "تم إنشاء الحساب بنجاح!")
     register_screen.withdraw()
-    load_data()
     reminders_screen.deiconify()
 
 tk.Button(register_screen, text="ابدأ", command=register_user).place(x=160, y=450)
@@ -408,7 +497,7 @@ reminders_screen.configure(bg="#f4e7da")
 
 tk.Label(reminders_screen, text="التذكيرات الحالية:", bg="#f4e7da", fg="darkgreen", font=("Arial", 18, "bold")).place(x=90, y=40)
 tk.Button(reminders_screen, text="إضافة", command=open_add_reminder_window, bg="green", fg="white").place(x=300, y=20, width=70)
-tk.Button(reminders_screen, text="حذف", command=delete_selected_reminder, bg="darkred", fg="white").place(x=20, y=20, width=70)
+# tk.Button(reminders_screen, text="حذف", command=delete_selected_reminder, bg="darkred", fg="white").place(x=20, y=20, width=70)
 tk.Button(reminders_screen, text="تسجيل الخروج", command=logout).place(x=10, y=800, width=100)
 tk.Button(reminders_screen, text="عرض الجدول الدراسي", command=open_schedule_screen, bg="blue", fg="white").place(x=250, y=800, width=130)
 
@@ -456,25 +545,19 @@ schedule_frame = tk.Frame(schedule_screen, bg="#f4e7da")
 schedule_frame.place(x=40, y=100, width=300, height=600)
 
 tk.Button(schedule_screen, text="إضافة مادة", command=open_add_subject_window, bg="green", fg="white").place(x=250, y=750, width=120)
-tk.Button(schedule_screen, text="حذف المادة", command=delete_selected_subject, bg="darkred", fg="white").place(x=30, y=750, width=120)
+#tk.Button(schedule_screen, text="حذف المادة", command=delete_selected_subject, bg="darkred", fg="white").place(x=30, y=750, width=120)
 tk.Button(schedule_screen, text="عودة للتذكيرات", command=back_to_reminders_from_schedule).place(x=10, y=800, width=150)
 
 # ============ تحميل البيانات القديمة ============
 
-load_data()
+#user_email = load_session()
 
-if reminders:
-    load_reminders()
-
-# تحميل المحاضرات أيضاً بعد تحميل البيانات
-update_schedule_display()
-
-# استرجاع الجلسة إذا موجودة
-user_email = load_session()
-if user_email:
-    # لو فيه جلسة محفوظة، ندخل المستخدم مباشرة على التذكيرات
-    root.withdraw()
-    reminders_screen.deiconify()
+#if user_email:
+   # load_data()              # تحميل بيانات المستخدم الحالي فقط
+    #load_reminders()         # عرض التذكيرات الخاصة بالمستخدم
+    #update_schedule_display()  # عرض الجدول الدراسي
+   # root.withdraw()
+    #reminders_screen.deiconify()
 
 # ============ فحص التذكيرات والمحاضرات ============
 
